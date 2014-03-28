@@ -1,0 +1,2 @@
+Copyright (c) 2014 Eric Fjosee, Luke Jones, Jeffery Lewis, Nicholas Pitt
+All Rights Reserved
