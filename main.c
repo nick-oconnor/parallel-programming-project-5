@@ -282,8 +282,9 @@ int main(int argc, char** argv) {
         B[i] = &(contiguousB[slice_size*i]);
 
     C = (double **)calloc( slice_size, sizeof(double*));
+    double *contiguousC=(double *)calloc(M_SIZE*slice_size,sizeof(double));
     for( i = 0; i < slice_size; i++ ) 
-        C[i] = (double *)calloc( M_SIZE, sizeof(double));
+        C[i] = &(contiguousC[slice_size*i]);
 
     D = (double **)calloc( M_SIZE, sizeof(double*));
     double *contiguousD=(double *)calloc(M_SIZE*slice_size,sizeof(double));
@@ -407,6 +408,13 @@ int main(int argc, char** argv) {
         //printf("%i:Sent Message!\n",myrank);
     }
     
+    // All ranks write to 1 file (8MB aligned)
+    MPI_File fh;
+
+    MPI_File_open(MPI_COMM_WORLD, "results.bin", MPI_MODE_WRONLY | MPI_MODE_CREATE, MPI_INFO_NULL, &fh);
+
+    MPI_File_write_at_all(fh, myrank * 8 * 1024 * 1024, C[0], slice_size * M_SIZE, MPI_DOUBLE, MPI_STATUS_IGNORE);
+
     //Finalizing Program
     MPI_Finalize();
     if (myrank != 0) return MPI_SUCCESS;
