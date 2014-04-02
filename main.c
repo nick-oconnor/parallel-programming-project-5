@@ -10,7 +10,7 @@
 #include <time.h>
 #include <pthread.h>
 
-#define M_SIZE 1024
+#define M_SIZE 16384
 
 #if defined(__i386__)
 
@@ -271,25 +271,36 @@ int main(int argc, char** argv) {
     //slice_size is already divided by the number of threads
     double **A,**B,**C,**D;
     //this is done to have double** with contiguous memory
-    A = (double **)calloc( M_SIZE, sizeof(double*));
-  for( i = 0; i < M_SIZE; i++ ) 
-    A[i] = (double *)calloc( slice_size, sizeof(double));
+    A = (double **)calloc( slice_size, sizeof(double*));
+  for( i = 0; i < slice_size; i++ ) 
+    A[i] = (double *)calloc( M_SIZE, sizeof(double));
 
   B = (double **)calloc( M_SIZE, sizeof(double*));
   double *contiguousB=(double *)calloc(M_SIZE*slice_size,sizeof(double));
   for( i = 0; i < M_SIZE; i++ ) 
     B[i] = &(contiguousB[slice_size*i]);
 
-  C = (double **)calloc( M_SIZE, sizeof(double*));
-  for( i = 0; i < M_SIZE; i++ ) 
-    C[i] = (double *)calloc( slice_size, sizeof(double));
+  C = (double **)calloc( slice_size, sizeof(double*));
+  for( i = 0; i < slice_size; i++ ) 
+    C[i] = (double *)calloc( M_SIZE, sizeof(double));
 
-D = (double **)calloc( M_SIZE, sizeof(double*));
+  D = (double **)calloc( M_SIZE, sizeof(double*));
   double *contiguousD=(double *)calloc(M_SIZE*slice_size,sizeof(double));
   for( i = 0; i < M_SIZE; i++ ) 
     D[i] = &(contiguousD[slice_size*i]);
 
-    
+    if (A == NULL){
+      printf("A is Null!\n");
+      return 0;
+    }
+    if (B == NULL){
+      printf("B is Null!\n");
+      return 0;
+    }
+    if (contiguousB == NULL){
+      printf("Contiguous B is Null!\n");
+      return 0;
+    }
     //Filling A&B matrices
     for( i = 0; i < slice_size; i++ ){
         for( j = 0; j < M_SIZE; j++ )
@@ -321,11 +332,8 @@ D = (double **)calloc( M_SIZE, sizeof(double*));
     vars.A = (double**)A; vars.B = (double**)B; vars.C = (double**)C; 
       vars.myrank = myrank; vars.threads=threads; vars.slice_size = slice_size;
       vars.t_id = t_id;
-      //printf("C: %p\n",C);
-    /*printf("Rank %i: B: %p\n",myrank,B);
-    printf("Rank %i: b: %p\n",myrank,vars.B);
-    printf("Rank %i: A: %lf\n",myrank,A[0][0]);
-    printf("Rank %i: a: %lf\n",myrank,vars.A[0][0]);*/
+    //printf("C: %p\n",C);
+    //printf("Rank %i: B: %p\n",myrank,B);printf("Rank %i: b: %p\n",myrank,vars.B);printf("Rank %i: A: %lf\n",myrank,A[0][0]);printf("Rank %i: a: %lf\n",myrank,vars.A[0][0]);
     
     //runs multiplication for each message
     for (i = 0; i < numprocs; i++)
@@ -393,36 +401,21 @@ D = (double **)calloc( M_SIZE, sizeof(double*));
         do {
             MPI_Test(&request_out,&flag,&status);
         } while (!flag);
+        
         isend_total+=rdtsc()-isend_tmp;
         //printf("%i:Sent Message!\n",myrank);
     }
     
-    //Statistic allreduces
-    /*long long int mm_max,mm_avg,mm_min,isend_max,isend_avg,isend_min,irecv_max,irecv_avg,irecv_min;
-    MPI_Allreduce(&mm_total,&mm_max,1,MPI_LONG_LONG_INT,MPI_MAX,MPI_COMM_WORLD);
-    MPI_Allreduce(&mm_total,&mm_avg,1,MPI_LONG_LONG_INT,MPI_SUM,MPI_COMM_WORLD);
-    MPI_Allreduce(&mm_total,&mm_min,1,MPI_LONG_LONG_INT,MPI_MIN,MPI_COMM_WORLD);
-    MPI_Allreduce(&isend_total,&isend_max,1,MPI_LONG_LONG_INT,MPI_MAX,MPI_COMM_WORLD);
-    MPI_Allreduce(&isend_total,&isend_avg,1,MPI_LONG_LONG_INT,MPI_SUM,MPI_COMM_WORLD);
-    MPI_Allreduce(&isend_total,&isend_min,1,MPI_LONG_LONG_INT,MPI_MIN,MPI_COMM_WORLD);
-    MPI_Allreduce(&irecv_total,&irecv_max,1,MPI_LONG_LONG_INT,MPI_MAX,MPI_COMM_WORLD);
-    MPI_Allreduce(&irecv_total,&irecv_avg,1,MPI_LONG_LONG_INT,MPI_SUM,MPI_COMM_WORLD);
-    MPI_Allreduce(&irecv_total,&irecv_min,1,MPI_LONG_LONG_INT,MPI_MIN,MPI_COMM_WORLD);*/
+    //Finalizing Program
     MPI_Finalize();
     if (myrank != 0) return MPI_SUCCESS;
-    /*mm_avg= mm_avg/numprocs;
-    isend_avg= isend_avg/numprocs;
-    irecv_avg= irecv_avg/numprocs;
-    finish = rdtsc();*/
     unsigned long long total = rdtsc()-start;
     
     
     //printf("%i\n",M_SIZE);
     //printf("%i\n",numprocs);
     //multiplication, isend, irecv
-    /*printf("max:%lld avg:%lld min:%lld\n",mm_max,mm_avg,mm_min);
-    printf("max:%lld avg:%lld min:%lld\n",isend_max,isend_avg,isend_min);
-    printf("max:%lld avg:%lld min:%lld\n",irecv_max,irecv_avg,irecv_min);*/
-    printf("%i size, %i ranks, %i threads, %lld seconds\n", M_SIZE, numprocs, threads, total / 2530000000);
+    printf("%i size, %i ranks, %i threads, %lld seconds\n", M_SIZE, numprocs, threads, total / 1600000000);
+    // MPI_Finalize();
     return (EXIT_SUCCESS);
 }
