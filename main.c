@@ -424,6 +424,6 @@ int main(int argc, char** argv) {
     /*printf("max:%lld avg:%lld min:%lld\n",mm_max,mm_avg,mm_min);
     printf("max:%lld avg:%lld min:%lld\n",isend_max,isend_avg,isend_min);
     printf("max:%lld avg:%lld min:%lld\n",irecv_max,irecv_avg,irecv_min);*/
-    printf("%i size, %i ranks, %i threads, %lld seconds\n", M_SIZE, numprocs, threads, total / 2530000000);
+    printf("%i size, %i ranks, %i threads, %lld seconds\n", M_SIZE, numprocs, threads, total / 1600000000);
     return (EXIT_SUCCESS);
 }
