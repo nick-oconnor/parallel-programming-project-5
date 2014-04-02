@@ -10,7 +10,7 @@
 #include <time.h>
 #include <pthread.h>
 
-#define M_SIZE 8
+#define M_SIZE 1024
 
 #if defined(__i386__)
 
@@ -43,7 +43,7 @@ static __inline__ unsigned long long rdtsc(void)
                 "\tcmpw    %2,%0        \n"
                 "\tbne     0b         \n"
                 : "=r"(upper),"=r"(lower),"=r"(tmp)
-           );
+		   );
   result = upper;
   result = result<<32;
   result = result|lower;
@@ -72,7 +72,7 @@ void init_genrand(unsigned long s)
     mt[0]= s & 0xffffffffUL;
     for (mti=1; mti<N; mti++) {
         mt[mti] = 
-        (1812433253UL * (mt[mti-1] ^ (mt[mti-1] >> 30)) + mti); 
+	    (1812433253UL * (mt[mti-1] ^ (mt[mti-1] >> 30)) + mti); 
         /* See Knuth TAOCP Vol2. 3rd Ed. P.106 for multiplier. */
         /* In the previous versions, MSBs of the seed affect   */
         /* only MSBs of the array mt[].                        */
@@ -198,14 +198,14 @@ double genrand_res53(void)
 
     for( i = 0; i < size; i++ )
       {
-    if( i != 0 && i % 16 == 0 )
-      {
-        last = current;
-        current = rdtsc();
-      }
+	if( i != 0 && i % 16 == 0 )
+	  {
+	    last = current;
+	    current = rdtsc();
+	  }
         for( j = 0; j < size; j++ )
-      for( k = 0; k < size; k++ )
-        C[ i ][ j ] += A[ i ][ k ] * B[ k ][ j ];
+	  for( k = 0; k < size; k++ )
+	    C[ i ][ j ] += A[ i ][ k ] * B[ k ][ j ];
       }
 }*/
 struct void_star{
@@ -220,25 +220,29 @@ void * thread_entry(void * vars){
     for (i = 0; i < var->threads; i++)
         if (var->t_id[i]==pthread_self())
             break;
-    printf("past break\n");
-    if(i==0 && var->myrank==0){
-    printf("C: %p",var->C);
+    //printf("past break\n");
+    //printf("%i: %i: A: %p\n",var->myrank,i,var->A);
+    //printf("%i: %i: B: %p\n",var->myrank,i,var->B);
+    //printf("%i: %i: C: %p\n",var->myrank,i,var->C);
+    int comps = 0;
     int s,j,k,offset=var->myrank*var->slice_size;
     for (s = i*(var->slice_size/var->threads); s < (i+1)*(var->slice_size/var->threads); s++){\
         for (j = 0; j < var->slice_size; j++){
             for (k = 0; k < M_SIZE; k++){
-                printf("a\n");
-                printf("s: %i\nj: %i\noffset: %i\nk: %i\n",s,j,offset,k);
-                printf("C: %lf\n",var->C[s][(j+offset)]);
-                printf("A: %lf\n",var->A[s][k]);
-                printf("B: %lf\n",var->B[k][j]);
+                //printf("%i: %i: a\n",var->myrank,i);
+                //printf("s: %i  j: %i  offset: %i  k: %i\n",s,j,offset,k);
+                //printf("A: %lf\n",var->A[s][k]);
+                //printf("B: %lf\n",var->B[k][j]);
                 var->C[s][(j+offset)] += var->A[s][k] * var->B[k][j];
-                printf("z\n");
+                //printf("C: %lf\n",var->C[s][(j+offset)]);
+                //printf("z\n");
             }
+            comps++;
         }
-    }}
-    printf("b: %i\n",var->myrank);
-    return;
+    }
+    //printf("%i: %i: done\n",var->myrank,i);
+    pthread_exit(NULL);
+    return NULL;
 }
 
 int main(int argc, char** argv) {
@@ -247,7 +251,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     
-    unsigned long long start = rdtsc(), finish;
+    unsigned long long start = rdtsc();
     //Timer has started!
     int i, j;
     int myrank, numprocs;
@@ -265,13 +269,25 @@ int main(int argc, char** argv) {
     init_by_array(rng_init_seeds, rng_init_length);
     
     //slice_size is already divided by the number of threads
-    double A[slice_size][M_SIZE];
+    double **A,**B,**C,**D;
+    //this is done to have double** with contiguous memory
+    A = (double **)calloc( M_SIZE, sizeof(double*));
+  for( i = 0; i < M_SIZE; i++ ) 
+    A[i] = (double *)calloc( slice_size, sizeof(double));
 
-    double B[M_SIZE][slice_size];
+  B = (double **)calloc( M_SIZE, sizeof(double*));
+  double *contiguousB=(double *)calloc(M_SIZE*slice_size,sizeof(double));
+  for( i = 0; i < M_SIZE; i++ ) 
+    B[i] = &(contiguousB[slice_size*i]);
 
-    double C[slice_size][M_SIZE];
-    
-    double D[M_SIZE][slice_size];
+  C = (double **)calloc( M_SIZE, sizeof(double*));
+  for( i = 0; i < M_SIZE; i++ ) 
+    C[i] = (double *)calloc( slice_size, sizeof(double));
+
+D = (double **)calloc( M_SIZE, sizeof(double*));
+  double *contiguousD=(double *)calloc(M_SIZE*slice_size,sizeof(double));
+  for( i = 0; i < M_SIZE; i++ ) 
+    D[i] = &(contiguousD[slice_size*i]);
 
     
     //Filling A&B matrices
@@ -288,6 +304,7 @@ int main(int argc, char** argv) {
     //A is slice_size * M_SIZE
     //B is M_SIZE * slice_size
     //C is slice_size * M_SIZE
+    //D is M_SIZE * slice_size
     //slice_size is N/P, M_SIZE is N
     //N is size of matrix, P is number of ranks
     
@@ -304,15 +321,14 @@ int main(int argc, char** argv) {
     vars.A = (double**)A; vars.B = (double**)B; vars.C = (double**)C; 
       vars.myrank = myrank; vars.threads=threads; vars.slice_size = slice_size;
       vars.t_id = t_id;
-      printf("C: %p\n",C);
-    /*( printf("Rank %i: B: %p\n",myrank,B);
-    printf("Rank %i: b: %p\n",myrank,vars[1]);
-    printf("Rank %i: A: %p\n",myrank,A);
-    printf("Rank %i: a: %p\n",myrank,vars[0]);*/
-    
+      //printf("C: %p\n",C);
+    /*printf("Rank %i: B: %p\n",myrank,B);
+    printf("Rank %i: b: %p\n",myrank,vars.B);
+    printf("Rank %i: A: %lf\n",myrank,A[0][0]);
+    printf("Rank %i: a: %lf\n",myrank,vars.A[0][0]);*/
     
     //runs multiplication for each message
-    for (i = 0; i < numprocs-1; i++)
+    for (i = 0; i < numprocs; i++)
     {
         //post receive message
         irecv_tmp = rdtsc();
@@ -334,16 +350,34 @@ int main(int argc, char** argv) {
                 }
             //if(myrank==0)printf("%i:B:%lf\n",myrank,B[0][0]);
         }
-        MPI_Irecv(D, M_SIZE*slice_size, MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &request_in); 
+        MPI_Irecv(contiguousD, M_SIZE*slice_size, MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &request_in); 
         irecv_total+=rdtsc()-irecv_tmp;
         
         
         //now multiplying the matrices
-        
-        for (i = 0; i < threads; i++){
-            printf("New Thread!\n");
-            if (pthread_create(&t_id[i],NULL,&thread_entry,(void*)&vars)) printf("\nError during thread creation!\n");
+        //creating threads to do the computation
+        pthread_attr_t attr;
+        pthread_attr_init(&attr );
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+        int t;
+        for (t = 0; t < threads; t++){
+            //printf("New Thread!\n");
+            if (pthread_create(&t_id[t],&attr,&thread_entry,(void*)&vars)) printf("\nError during thread creation!\n");
         }
+        pthread_attr_destroy(&attr );
+        //printf("%i: attr destroyed\n",myrank);
+        //Threads join with original again
+        for (t = 0; t < threads; t++){
+             //if(!pthread_join(t_id[i],NULL)) printf("%i: Thread %i exited with error.\n",myrank,i);
+            int rv = pthread_join(t_id[t],NULL);
+            if (rv!=0){
+                printf("i: Thread %i exited with error %i .\n",myrank,i,rv);
+            }
+            else{
+                //printf("%i: %i: thread joined successfully\n",myrank,i);
+            }
+        }
+        //printf("%i: All threads closed.\n",myrank);
         mm_tmp = rdtsc();
         
         mm_total+=rdtsc()-mm_tmp;
@@ -351,7 +385,7 @@ int main(int argc, char** argv) {
         //posting send message
         isend_tmp = rdtsc();
         if (i != numprocs-1){
-            MPI_Isend(B, M_SIZE*slice_size, MPI_DOUBLE, (myrank+1)%numprocs, 0, MPI_COMM_WORLD, &request_out);
+            MPI_Isend(contiguousB, M_SIZE*slice_size, MPI_DOUBLE, (myrank+1)%numprocs, 0, MPI_COMM_WORLD, &request_out);
         }
         //printf("%i:Waiting for send to %i\n",myrank,(myrank+1)%numprocs);
         //Blocks sending until previous message is sent
@@ -361,10 +395,6 @@ int main(int argc, char** argv) {
         } while (!flag);
         isend_total+=rdtsc()-isend_tmp;
         //printf("%i:Sent Message!\n",myrank);
-    }
-    //Threads join with original again
-    for (i = 0; i < threads; i++){
-         pthread_join(t_id[i],NULL);
     }
     
     //Statistic allreduces
@@ -377,14 +407,14 @@ int main(int argc, char** argv) {
     MPI_Allreduce(&isend_total,&isend_min,1,MPI_LONG_LONG_INT,MPI_MIN,MPI_COMM_WORLD);
     MPI_Allreduce(&irecv_total,&irecv_max,1,MPI_LONG_LONG_INT,MPI_MAX,MPI_COMM_WORLD);
     MPI_Allreduce(&irecv_total,&irecv_avg,1,MPI_LONG_LONG_INT,MPI_SUM,MPI_COMM_WORLD);
-    MPI_Allreduce(&irecv_total,&irecv_min,1,MPI_LONG_LONG_INT,MPI_MIN,MPI_COMM_WORLD);
+    MPI_Allreduce(&irecv_total,&irecv_min,1,MPI_LONG_LONG_INT,MPI_MIN,MPI_COMM_WORLD);*/
     MPI_Finalize();
     if (myrank != 0) return MPI_SUCCESS;
-    mm_avg= mm_avg/numprocs;
+    /*mm_avg= mm_avg/numprocs;
     isend_avg= isend_avg/numprocs;
     irecv_avg= irecv_avg/numprocs;
-    finish = rdtsc();
-    unsigned long long total = finish-start;*/
+    finish = rdtsc();*/
+    unsigned long long total = rdtsc()-start;
     
     
     //printf("%i\n",M_SIZE);
@@ -392,7 +422,7 @@ int main(int argc, char** argv) {
     //multiplication, isend, irecv
     /*printf("max:%lld avg:%lld min:%lld\n",mm_max,mm_avg,mm_min);
     printf("max:%lld avg:%lld min:%lld\n",isend_max,isend_avg,isend_min);
-    printf("max:%lld avg:%lld min:%lld\n",irecv_max,irecv_avg,irecv_min);
-    printf("%lld\n", total);*/
+    printf("max:%lld avg:%lld min:%lld\n",irecv_max,irecv_avg,irecv_min);*/
+    printf("%i size, %i ranks, %i threads, %lld seconds\n", M_SIZE, numprocs, threads, total / 2530000000);
     return (EXIT_SUCCESS);
 }
