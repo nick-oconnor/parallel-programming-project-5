@@ -16,26 +16,27 @@
 
 static __inline__ unsigned long long rdtsc(void)
 {
-  unsigned long long int x;
-  __asm__ volatile (".byte 0x0f, 0x31" : "=A" (x));
-  return x;
+    unsigned long long int x;
+    __asm__ volatile (".byte 0x0f, 0x31" : "=A" (x));
+    return x;
 }
-#elif defined(__x86_64__)
 
+#elif defined(__x86_64__)
 
 static __inline__ unsigned long long rdtsc(void)
 {
-  unsigned hi, lo;
-  __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
-  return ( (unsigned long long)lo)|( ((unsigned long long)hi)<<32 );
+    unsigned hi, lo;
+    __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
+    return ( (unsigned long long)lo)|( ((unsigned long long)hi)<<32 );
 }
 
 #elif defined(__powerpc__)
+
 static __inline__ unsigned long long rdtsc(void)
 {
-  unsigned long long int result=0;
-  unsigned long int upper, lower,tmp;
-  __asm__ volatile(
+    unsigned long long int result=0;
+    unsigned long int upper, lower,tmp;
+    __asm__ volatile(
                 "0:                  \n"
                 "\tmftbu   %0           \n"
                 "\tmftb    %1           \n"
@@ -43,13 +44,13 @@ static __inline__ unsigned long long rdtsc(void)
                 "\tcmpw    %2,%0        \n"
                 "\tbne     0b         \n"
                 : "=r"(upper),"=r"(lower),"=r"(tmp)
-		   );
-  result = upper;
-  result = result<<32;
-  result = result|lower;
-
-  return(result);
+	);
+    result = upper;
+    result = result<<32;
+    result = result|lower;
+    return(result);
 }
+
 #endif
 
 /***********************************************************************/
@@ -272,22 +273,22 @@ int main(int argc, char** argv) {
     double **A,**B,**C,**D;
     //this is done to have double** with contiguous memory
     A = (double **)calloc( M_SIZE, sizeof(double*));
-  for( i = 0; i < M_SIZE; i++ ) 
-    A[i] = (double *)calloc( slice_size, sizeof(double));
+    for( i = 0; i < M_SIZE; i++ ) 
+        A[i] = (double *)calloc( slice_size, sizeof(double));
 
-  B = (double **)calloc( M_SIZE, sizeof(double*));
-  double *contiguousB=(double *)calloc(M_SIZE*slice_size,sizeof(double));
-  for( i = 0; i < M_SIZE; i++ ) 
-    B[i] = &(contiguousB[slice_size*i]);
+    B = (double **)calloc( M_SIZE, sizeof(double*));
+    double *contiguousB=(double *)calloc(M_SIZE*slice_size,sizeof(double));
+    for( i = 0; i < M_SIZE; i++ ) 
+        B[i] = &(contiguousB[slice_size*i]);
 
-  C = (double **)calloc( M_SIZE, sizeof(double*));
-  for( i = 0; i < M_SIZE; i++ ) 
-    C[i] = (double *)calloc( slice_size, sizeof(double));
+    C = (double **)calloc( M_SIZE, sizeof(double*));
+    for( i = 0; i < M_SIZE; i++ ) 
+        C[i] = (double *)calloc( slice_size, sizeof(double));
 
-D = (double **)calloc( M_SIZE, sizeof(double*));
-  double *contiguousD=(double *)calloc(M_SIZE*slice_size,sizeof(double));
-  for( i = 0; i < M_SIZE; i++ ) 
-    D[i] = &(contiguousD[slice_size*i]);
+    D = (double **)calloc( M_SIZE, sizeof(double*));
+    double *contiguousD=(double *)calloc(M_SIZE*slice_size,sizeof(double));
+    for( i = 0; i < M_SIZE; i++ ) 
+        D[i] = &(contiguousD[slice_size*i]);
 
     
     //Filling A&B matrices
@@ -319,10 +320,10 @@ D = (double **)calloc( M_SIZE, sizeof(double*));
     pthread_t t_id[threads];
     struct void_star vars;
     vars.A = (double**)A; vars.B = (double**)B; vars.C = (double**)C; 
-      vars.myrank = myrank; vars.threads=threads; vars.slice_size = slice_size;
-      vars.t_id = t_id;
-      //printf("C: %p\n",C);
-    /*printf("Rank %i: B: %p\n",myrank,B);
+    vars.myrank = myrank; vars.threads=threads; vars.slice_size = slice_size;
+    vars.t_id = t_id;
+    /*printf("C: %p\n",C);
+    printf("Rank %i: B: %p\n",myrank,B);
     printf("Rank %i: b: %p\n",myrank,vars.B);
     printf("Rank %i: A: %lf\n",myrank,A[0][0]);
     printf("Rank %i: a: %lf\n",myrank,vars.A[0][0]);*/
