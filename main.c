@@ -486,7 +486,7 @@ int main(int argc, char** argv) {
 	
 	io_total += rdtsc() - io_tmp;
 	
-	//Calculate banwidth in GB/s.
+	//Calculate bandwidth in GB/s.
 	bwidth = (((double)bytesize / ((double)io_total / 1600000000.0)) / (1024.0 *1024.0 *1024.0));
 	
 	MPI_File_close(&fh);
