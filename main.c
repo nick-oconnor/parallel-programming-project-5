@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <pthread.h>
+#include <string.h>
 
 #define M_SIZE 16384
 
@@ -247,8 +248,10 @@ void * thread_entry(void * vars){
 }
 
 int main(int argc, char** argv) {
-    if (argc != 2){
-        printf("Use an interger for threads!\n");
+	//argv[2] = number of ranks per color.
+	//argv[3] = 1 if compact, 0 if non-compact file storage.
+    if (argc != 4){
+        printf("Wrong number of arguments!\n");
         return 1;
     }
     
@@ -256,6 +259,7 @@ int main(int argc, char** argv) {
     //Timer has started!
     int i, j;
     int myrank, numprocs;
+    
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -282,8 +286,9 @@ int main(int argc, char** argv) {
         B[i] = &(contiguousB[slice_size*i]);
 
     C = (double **)calloc( slice_size, sizeof(double*));
+    double *contiguousC=(double *)calloc(M_SIZE*slice_size,sizeof(double));
     for( i = 0; i < slice_size; i++ ) 
-        C[i] = (double *)calloc( M_SIZE, sizeof(double));
+        C[i] = &(contiguousC[slice_size*i]);
 
     D = (double **)calloc( M_SIZE, sizeof(double*));
     double *contiguousD=(double *)calloc(M_SIZE*slice_size,sizeof(double));
@@ -323,8 +328,8 @@ int main(int argc, char** argv) {
     MPI_Request request_out;//for checking sends
     MPI_Request request_in; //for checking receives
     
-    unsigned long long mm_tmp,isend_tmp,irecv_tmp;
-    long long int mm_total=0,isend_total=0,irecv_total=0;
+    unsigned long long mm_tmp,isend_tmp,irecv_tmp,io_tmp;
+    long long int mm_total=0,isend_total=0,irecv_total=0,io_total=0;
     
     //creation of new threads
     int threads = atoi(argv[1]);
@@ -337,6 +342,8 @@ int main(int argc, char** argv) {
     //printf("Rank %i: B: %p\n",myrank,B);printf("Rank %i: b: %p\n",myrank,vars.B);printf("Rank %i: A: %lf\n",myrank,A[0][0]);printf("Rank %i: a: %lf\n",myrank,vars.A[0][0]);
     
     //runs multiplication for each message
+    
+       mm_tmp = rdtsc();
     for (i = 0; i < numprocs; i++)
     {
         //post receive message
@@ -380,16 +387,14 @@ int main(int argc, char** argv) {
              //if(!pthread_join(t_id[i],NULL)) printf("%i: Thread %i exited with error.\n",myrank,i);
             int rv = pthread_join(t_id[t],NULL);
             if (rv!=0){
-                printf("i: Thread %i exited with error %i .\n",myrank,i,rv);
+                printf("%i: Thread %i exited with error %i .\n",myrank,i,rv);
             }
             else{
                 //printf("%i: %i: thread joined successfully\n",myrank,i);
             }
         }
-        //printf("%i: All threads closed.\n",myrank);
-        mm_tmp = rdtsc();
         
-        mm_total+=rdtsc()-mm_tmp;
+        //printf("%i: All threads closed.\n",myrank);
         
         //posting send message
         isend_tmp = rdtsc();
@@ -407,16 +412,91 @@ int main(int argc, char** argv) {
         //printf("%i:Sent Message!\n",myrank);
     }
     
+    mm_total+=rdtsc()-mm_tmp;
+    
+    int bytesize, mycolor, compact, numchunks, numcolors, ranks_per_color,
+		offset = 0;
+	double bwidth = 0.0;
+    char *filename = calloc(20, sizeof(char));
+    
+    MPI_File fh;
+    MPI_Comm sub_comm;
+    
+    ranks_per_color = atoi(argv[2]);
+    numcolors = numprocs / ranks_per_color;
+	compact = atoi(argv[3]);
+	//Split up ranks into numcolors # of groups.
+	mycolor = myrank % numcolors;
+	bytesize = (int)slice_size * (int)M_SIZE * 8;
+	//numchunks = number of chunks of 8 MB needed to output C.
+	numchunks = bytesize / 8388608;
+	
+	//If bytesize < 8MB, it'll fit in one chunk.
+	if (numchunks == 0){
+		numchunks = 1;
+	}
+	
+	//If all ranks will be sharing one file (If one color), use rank for offset multiplier.
+	//Else, use the rank's position in its color as offset multiplier.
+	if (numcolors == 1){
+		if (compact){
+			offset = myrank * bytesize;
+		}
+		else{
+			offset = myrank * numchunks * bytesize;
+		}
+	}
+	else{
+		for (i = 0; i <= numcolors; i++){
+			if (myrank >= i*numcolors && myrank < (i+1)*numcolors){
+				if (compact){
+					offset = i * bytesize;
+				}
+				else{
+					offset = i * numchunks * bytesize;
+				}
+			}
+		}
+	}
+	
+	//If one file should be used, don't have a number at the end of the name.
+	//Else, each rank in a color will open the same filename.
+	
+	if (numcolors == 1){
+		strcpy(filename, "result.bin");
+	}
+	else{
+		sprintf(filename, "%s%d%s", "result", mycolor, ".bin");
+	}
+
+	//Create sub communication worlds and open the output file.
+	MPI_Comm_split(MPI_COMM_WORLD, mycolor, myrank, &sub_comm);
+	MPI_File_open(sub_comm, filename, MPI_MODE_RDWR | MPI_MODE_CREATE, MPI_INFO_NULL, &fh);
+	
+	
+	io_tmp = rdtsc();
+	//If current run should be all ranks writing to same file, set argv[3] = numranks on command line.
+	//Write data to file.
+	if (ranks_per_color == numprocs){
+		MPI_File_write_at_all(fh, offset, C[0], bytesize, MPI_DOUBLE, MPI_STATUS_IGNORE);
+	}
+	else{
+		MPI_File_write_at(fh, offset, C[0], bytesize, MPI_DOUBLE, MPI_STATUS_IGNORE);
+	}
+	
+	io_total += rdtsc() - io_tmp;
+	
+	//Calculate banwidth in GB/s.
+	bwidth = (((double)bytesize / ((double)io_total / 1600000000.0)) / (1024.0 *1024.0 *1024.0));
+	
+	MPI_File_close(&fh);
+	MPI_Comm_free(&sub_comm);
     //Finalizing Program
     MPI_Finalize();
     if (myrank != 0) return MPI_SUCCESS;
     unsigned long long total = rdtsc()-start;
     
-    
-    //printf("%i\n",M_SIZE);
-    //printf("%i\n",numprocs);
-    //multiplication, isend, irecv
-    printf("%i size, %i ranks, %i threads, %lld seconds\n", M_SIZE, numprocs, threads, total / 1600000000);
-    // MPI_Finalize();
+    //Print information on the current run.
+    printf("%i size, %i ranks, %i threads, %lld seconds runtime, %lld seconds in compute, %lf GB/s bandwidth\n", M_SIZE, numprocs, threads, total / 1600000000, mm_total / 1600000000, bwidth);
     return (EXIT_SUCCESS);
 }
