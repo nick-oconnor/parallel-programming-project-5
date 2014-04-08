@@ -417,7 +417,7 @@ int main(int argc, char** argv) {
     int bytesize, mycolor, compact, numchunks, numcolors, ranks_per_color,
 		offset = 0;
 	double bwidth = 0.0;
-    char *filename = calloc(20, sizeof(char));
+    char *filename = calloc(30, sizeof(char));
     
     MPI_File fh;
     MPI_Comm sub_comm;
@@ -463,10 +463,10 @@ int main(int argc, char** argv) {
 	//Else, each rank in a color will open the same filename.
 	
 	if (numcolors == 1){
-		strcpy(filename, "result.bin");
+		strcpy(filename, "bglockless:result.bin");
 	}
 	else{
-		sprintf(filename, "%s%d%s", "result", mycolor, ".bin");
+		sprintf(filename, "%s%d%s", "bglockless:result", mycolor, ".bin");
 	}
 
 	//Create sub communication worlds and open the output file.
